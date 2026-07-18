@@ -64,7 +64,7 @@ export default function Chat() {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `I received your message: "${input}". This is a simulated response. In a real implementation, this would call an AI API.`,
+        content: `I received your message: "${input}".`,
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, assistantMessage]);

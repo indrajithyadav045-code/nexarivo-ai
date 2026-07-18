@@ -4,32 +4,58 @@ import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
+import { useAuth } from "@/_core/hooks/useAuth";
 import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
+import DashboardChat from "./pages/dashboard/Chat";
+import DashboardProjects from "./pages/dashboard/Projects";
+import DashboardDocuments from "./pages/dashboard/Documents";
+import DashboardKnowledgeBase from "./pages/dashboard/KnowledgeBase";
+import DashboardAgents from "./pages/dashboard/Agents";
+import DashboardAnalytics from "./pages/dashboard/Analytics";
+import DashboardSettings from "./pages/dashboard/Settings";
+
+function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
+  const { isAuthenticated, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-accent"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    window.location.href = '/';
+    return null;
+  }
+
+  return <Component />;
+}
 
 function Router() {
-  // make sure to consider if you need authentication for certain routes
   return (
     <Switch>
-      <Route path={"/"} component={Home} />
-      <Route path={"/404"} component={NotFound} />
-      {/* Final fallback route */}
+      <Route path="/" component={Home} />
+      <Route path="/dashboard" component={() => <ProtectedRoute component={Dashboard} />} />
+      <Route path="/dashboard/chat" component={() => <ProtectedRoute component={DashboardChat} />} />
+      <Route path="/dashboard/projects" component={() => <ProtectedRoute component={DashboardProjects} />} />
+      <Route path="/dashboard/documents" component={() => <ProtectedRoute component={DashboardDocuments} />} />
+      <Route path="/dashboard/knowledge-base" component={() => <ProtectedRoute component={DashboardKnowledgeBase} />} />
+      <Route path="/dashboard/agents" component={() => <ProtectedRoute component={DashboardAgents} />} />
+      <Route path="/dashboard/analytics" component={() => <ProtectedRoute component={DashboardAnalytics} />} />
+      <Route path="/dashboard/settings" component={() => <ProtectedRoute component={DashboardSettings} />} />
+      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-// NOTE: About Theme
-// - First choose a default theme according to your design style (dark or light bg), than change color palette in index.css
-//   to keep consistent foreground/background color across components
-// - If you want to make theme switchable, pass `switchable` ThemeProvider and use `useTheme` hook
-
 function App() {
   return (
     <ErrorBoundary>
-      <ThemeProvider
-        defaultTheme="light"
-        // switchable
-      >
+      <ThemeProvider defaultTheme="dark" switchable>
         <TooltipProvider>
           <Toaster />
           <Router />

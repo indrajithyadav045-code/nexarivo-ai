@@ -1,33 +1,37 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Button } from "@/components/ui/button";
-import { Loader2 } from "lucide-react";
-import { Streamdown } from 'streamdown';
+import { useLocation } from "wouter";
+import Navbar from "@/components/marketing/Navbar";
+import Hero from "@/components/marketing/Hero";
+import Features from "@/components/marketing/Features";
+import WorkspacePreview from "@/components/marketing/WorkspacePreview";
+import AIAgents from "@/components/marketing/AIAgents";
+import Integrations from "@/components/marketing/Integrations";
+import Pricing from "@/components/marketing/Pricing";
+import FAQ from "@/components/marketing/FAQ";
+import CTA from "@/components/marketing/CTA";
+import Footer from "@/components/marketing/Footer";
 
-/**
- * All content in this page are only for example, replace with your own feature implementation
- * When building pages, remember your instructions in Frontend Workflow, Frontend Best Practices, Design Guide and Common Pitfalls
- */
 export default function Home() {
-  // The useAuth hook provides authentication state.
-  // To implement login/logout, call logout(), or start login from an event
-  // handler: onClick={() => startLogin()} (imported from "@/const"). Never call
-  // startLogin() during render (no href={startLogin()}) — it mints a one-time
-  // nonce cookie and must run only at the moment of navigation.
-  let { user, loading, error, isAuthenticated, logout } = useAuth();
+  const { isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
 
-  // If theme is switchable in App.tsx, we can implement theme toggling like this:
-  // const { theme, toggleTheme } = useTheme();
+  if (isAuthenticated) {
+    setLocation("/dashboard");
+    return null;
+  }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <main>
-        {/* Example: lucide-react for icons */}
-        <Loader2 className="animate-spin" />
-        Example Page
-        {/* Example: Streamdown for markdown rendering */}
-        <Streamdown>Any **markdown** content</Streamdown>
-        <Button variant="default">Example Button</Button>
-      </main>
+    <div className="min-h-screen bg-background text-foreground">
+      <Navbar />
+      <Hero />
+      <Features />
+      <WorkspacePreview />
+      <AIAgents />
+      <Integrations />
+      <Pricing />
+      <FAQ />
+      <CTA />
+      <Footer />
     </div>
   );
 }

@@ -47,8 +47,8 @@
 - [x] Implement streaming responses for Claude (UI ready)
 - [x] Implement streaming responses for OpenAI (UI ready)
 - [x] Add model selection and switching
-- [ ] Implement error handling and retry logic
-- [ ] Add token counting and usage tracking
+- [x] Implement error handling and retry logic
+- [x] Add token counting and usage tracking
 
 ## Advanced Chat Features
 - [x] Add markdown rendering to chat messages

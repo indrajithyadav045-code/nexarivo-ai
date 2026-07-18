@@ -20,7 +20,7 @@ export default function DashboardTopbar({ user }: TopbarProps) {
   const { theme, toggleTheme } = useTheme();
 
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6">
+    <header className="h-16 bg-gradient-to-r from-card to-background border-b border-border/50 flex items-center justify-between px-6 shadow-sm">
       {/* Left side - Search or title */}
       <div className="flex-1">
         <h1 className="text-lg font-semibold">Dashboard</h1>

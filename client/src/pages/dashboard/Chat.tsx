@@ -9,34 +9,63 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Send, Plus } from "lucide-react";
+import { Send, Plus, Copy, RotateCcw, Trash2, Loader } from "lucide-react";
+import { Streamdown } from "streamdown";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  model?: string;
+  isStreaming?: boolean;
+}
+
+interface Chat {
+  id: string;
+  title: string;
+  messages: Message[];
+  model: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 const models = [
-  { id: "gpt-4", name: "GPT-4" },
-  { id: "gpt-3.5", name: "GPT-3.5 Turbo" },
-  { id: "claude-3", name: "Claude 3" },
+  { id: "gpt-4", name: "GPT-4", provider: "OpenAI", icon: "🔵" },
+  { id: "gpt-3.5", name: "GPT-3.5 Turbo", provider: "OpenAI", icon: "🔵" },
+  { id: "claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", icon: "🟠" },
+  { id: "claude-3-sonnet", name: "Claude 3 Sonnet", provider: "Anthropic", icon: "🟠" },
 ];
 
 export default function Chat() {
-  const [messages, setMessages] = useState<Message[]>([
+  const [chats, setChats] = useState<Chat[]>([
     {
       id: "1",
-      role: "assistant",
-      content: "Hello! I'm your AI assistant. How can I help you today?",
-      timestamp: new Date(),
+      title: "New Chat",
+      messages: [
+        {
+          id: "1",
+          role: "assistant",
+          content: "# Welcome to NEXARIVO-AI\n\nHello! I'm your AI assistant powered by Claude and ChatGPT. I can help you with:\n\n- **Code Generation** - Write and debug code\n- **Writing** - Create content and documents\n- **Analysis** - Break down complex topics\n- **Problem Solving** - Find solutions to your challenges\n\nHow can I assist you today?",
+          timestamp: new Date(),
+          model: "gpt-4",
+        },
+      ],
+      model: "gpt-4",
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   ]);
+
+  const [currentChatId, setCurrentChatId] = useState("1");
   const [input, setInput] = useState("");
   const [selectedModel, setSelectedModel] = useState("gpt-4");
   const [isLoading, setIsLoading] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const currentChat = chats.find((c) => c.id === currentChatId);
+  const messages = currentChat?.messages || [];
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -54,115 +83,296 @@ export default function Chat() {
       role: "user",
       content: input,
       timestamp: new Date(),
+      model: selectedModel,
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === currentChatId
+          ? {
+              ...chat,
+              messages: [...chat.messages, userMessage],
+              updatedAt: new Date(),
+            }
+          : chat
+      )
+    );
+
     setInput("");
     setIsLoading(true);
 
+    // Simulate streaming response
     setTimeout(() => {
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `I received your message: "${input}".`,
+        content: `## Response from ${selectedModel}\n\nYou asked: "${userMessage.content}"\n\nThis is a professional response. In production, this would be:\n\n- **Streamed** from the API in real-time\n- **Formatted** with markdown support\n- **Syntax highlighted** for code blocks\n- **Fully interactive** with copy and regenerate options\n\n\`\`\`python\n# Example code response\ndef hello_world():\n    print("Hello from NEXARIVO-AI")\n\`\`\`\n\nYou can regenerate, copy, or continue the conversation.`,
         timestamp: new Date(),
+        model: selectedModel,
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === currentChatId
+            ? {
+                ...chat,
+                messages: [...chat.messages, assistantMessage],
+                updatedAt: new Date(),
+              }
+            : chat
+        )
+      );
+
       setIsLoading(false);
-    }, 1000);
+    }, 1500);
   };
 
+  const handleNewChat = () => {
+    const newChat: Chat = {
+      id: Date.now().toString(),
+      title: "New Chat",
+      messages: [],
+      model: selectedModel,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    setChats((prev) => [newChat, ...prev]);
+    setCurrentChatId(newChat.id);
+  };
+
+  const handleDeleteChat = (chatId: string) => {
+    setChats((prev) => prev.filter((c) => c.id !== chatId));
+    if (currentChatId === chatId) {
+      setCurrentChatId(chats[0]?.id || "");
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const selectedModelInfo = models.find((m) => m.id === selectedModel);
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="border-b border-border p-6 flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold mb-2">AI Chat</h2>
-          <p className="text-sm text-muted-foreground">Chat with AI agents</p>
+    <div className="flex h-full bg-background">
+      {/* Sidebar - Chat History */}
+      {showSidebar && (
+        <div className="w-64 bg-card border-r border-border flex flex-col overflow-hidden">
+          <div className="p-4 border-b border-border">
+            <Button
+              onClick={handleNewChat}
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
+            >
+              <Plus size={18} />
+              New Chat
+            </Button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {chats.map((chat) => (
+              <div
+                key={chat.id}
+                onClick={() => setCurrentChatId(chat.id)}
+                className={`p-3 rounded-lg cursor-pointer transition-colors group ${
+                  currentChatId === chat.id
+                    ? "bg-accent/20 border border-accent"
+                    : "hover:bg-background/50 border border-transparent"
+                }`}
+              >
+                <p className="text-sm font-medium truncate">{chat.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {chat.messages.length} messages
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteChat(chat.id);
+                  }}
+                  className="mt-2 w-full text-destructive hover:bg-destructive/10 opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <Trash2 size={14} />
+                  Delete
+                </Button>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Plus size={16} />
-            New Chat
-          </Button>
-        </div>
-      </div>
+      )}
 
       {/* Main Chat Area */}
-      <div className="flex-1 overflow-auto p-6 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-md lg:max-w-2xl px-4 py-3 rounded-lg ${
-                message.role === "user"
-                  ? "bg-accent text-accent-foreground"
-                  : "bg-card border border-border"
-              }`}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <div className="border-b border-border p-4 flex items-center justify-between bg-card/50">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowSidebar(!showSidebar)}
+              className="h-8 w-8 p-0"
             >
-              <p className="text-sm">{message.content}</p>
-              <span className="text-xs opacity-70 mt-1 block">
-                {message.timestamp.toLocaleTimeString()}
-              </span>
+              ☰
+            </Button>
+            <div>
+              <h2 className="text-lg font-bold">AI Chat</h2>
+              <p className="text-xs text-muted-foreground">
+                {selectedModelInfo?.provider} - {selectedModelInfo?.name}
+              </p>
             </div>
           </div>
-        ))}
-        {isLoading && (
-          <div className="flex justify-start">
-            <div className="bg-card border border-border px-4 py-3 rounded-lg">
-              <div className="flex gap-2">
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-100"></div>
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-200"></div>
-              </div>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      {/* Input Area */}
-      <div className="border-t border-border p-6 bg-card/50">
-        <div className="mb-4">
-          <label className="text-sm font-medium mb-2 block">Model</label>
-          <Select value={selectedModel} onValueChange={setSelectedModel}>
-            <SelectTrigger className="w-full md:w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {models.map((model) => (
-                <SelectItem key={model.id} value={model.id}>
-                  {model.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
 
-        <div className="flex gap-2">
-          <Input
-            placeholder="Type your message..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button
-            onClick={handleSendMessage}
-            disabled={isLoading || !input.trim()}
-            className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
-          >
-            <Send size={18} />
-            <span className="hidden sm:inline">Send</span>
-          </Button>
+        {/* Messages Area */}
+        <div className="flex-1 overflow-auto p-6 space-y-4">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center">
+              <div className="text-5xl mb-4">💬</div>
+              <h3 className="text-xl font-bold mb-2">Start a conversation</h3>
+              <p className="text-muted-foreground max-w-md">
+                Choose a model and ask anything. Your AI assistant is ready to help.
+              </p>
+            </div>
+          ) : (
+            messages.map((message) => (
+              <div
+                key={message.id}
+                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"} animate-in fade-in slide-in-from-bottom-2 duration-300`}
+              >
+                <div
+                  className={`max-w-2xl ${
+                    message.role === "user"
+                      ? "bg-accent text-accent-foreground rounded-2xl rounded-tr-sm px-4 py-3"
+                      : "bg-card border border-border rounded-2xl rounded-tl-sm p-4"
+                  }`}
+                >
+                  {message.role === "assistant" ? (
+                    <div className="prose prose-invert max-w-none text-sm">
+                      <Streamdown>{message.content}</Streamdown>
+                    </div>
+                  ) : (
+                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                  )}
+
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-border/30">
+                    <span className="text-xs opacity-70">
+                      {message.timestamp.toLocaleTimeString()}
+                    </span>
+                    {message.role === "assistant" && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(message.content)}
+                          className="h-6 w-6 p-0 hover:bg-accent/20"
+                          title="Copy"
+                        >
+                          <Copy size={14} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 hover:bg-accent/20"
+                          title="Regenerate"
+                        >
+                          <RotateCcw size={14} />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {isLoading && (
+            <div className="flex justify-start animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <div className="bg-card border border-border rounded-2xl rounded-tl-sm px-4 py-3">
+                <div className="flex gap-2 items-center">
+                  <Loader size={16} className="animate-spin text-accent" />
+                  <span className="text-sm text-muted-foreground">Thinking...</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input Area */}
+        <div className="border-t border-border p-6 bg-card/50">
+          <div className="max-w-4xl mx-auto space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div className="md:col-span-3">
+                <label className="text-xs font-semibold text-muted-foreground mb-2 block">
+                  AI Model
+                </label>
+                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {models.map((model) => (
+                      <SelectItem key={model.id} value={model.id}>
+                        <span className="flex items-center gap-2">
+                          <span>{model.icon}</span>
+                          {model.name} ({model.provider})
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-muted-foreground mb-2 block">
+                  &nbsp;
+                </label>
+                <Button
+                  onClick={handleNewChat}
+                  variant="outline"
+                  className="w-full gap-2"
+                >
+                  <Plus size={16} />
+                  New
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <Input
+                placeholder="Ask anything... (Shift+Enter for new line)"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                disabled={isLoading}
+                className="flex-1 bg-background border-border"
+              />
+              <Button
+                onClick={handleSendMessage}
+                disabled={isLoading || !input.trim()}
+                className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2 px-6"
+              >
+                {isLoading ? (
+                  <Loader size={18} className="animate-spin" />
+                ) : (
+                  <>
+                    <Send size={18} />
+                    <span className="hidden sm:inline">Send</span>
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center">
+              Powered by OpenAI & Anthropic • Your data is private and secure
+            </p>
+          </div>
         </div>
       </div>
     </div>

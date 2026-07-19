@@ -1,0 +1,2 @@
+import { auth } from '@clerk/nextjs/server';
+export async function POST(req: Request){const {userId}=await auth(); if(!userId)return Response.json({error:'Unauthorized'},{status:401}); const form=await req.formData(); const file=form.get('file'); if(!(file instanceof File))return Response.json({error:'File is required'},{status:400}); return Response.json({name:file.name,size:file.size,type:file.type,status:'accepted'});}

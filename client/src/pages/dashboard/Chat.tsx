@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/select";
 import { Send, Plus, Copy, RotateCcw, Trash2, Loader } from "lucide-react";
 import { Streamdown } from "streamdown";
+import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
 
 interface Message {
   id: string;
@@ -31,11 +33,16 @@ interface Chat {
 }
 
 const models = [
-  { id: "gpt-4", name: "GPT-4", provider: "OpenAI", icon: "🔵" },
-  { id: "gpt-3.5", name: "GPT-3.5 Turbo", provider: "OpenAI", icon: "🔵" },
-  { id: "claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", icon: "🟠" },
-  { id: "claude-3-sonnet", name: "Claude 3 Sonnet", provider: "Anthropic", icon: "🟠" },
+  { id: "nexarivo-lite", name: "NEXARIVO Lite", provider: "NEXARIVO", icon: "✨", tier: "free" },
+  { id: "nexarivo-pro", name: "NEXARIVO Pro", provider: "NEXARIVO", icon: "⚡", tier: "starter" },
+  { id: "nexarivo-ultra", name: "NEXARIVO Ultra", provider: "NEXARIVO", icon: "🚀", tier: "professional" },
+  { id: "gpt-3.5", name: "GPT-3.5 Turbo", provider: "OpenAI", icon: "🔵", tier: "starter" },
+  { id: "gpt-4", name: "GPT-4", provider: "OpenAI", icon: "🔵", tier: "professional" },
+  { id: "claude-sonnet", name: "Claude Sonnet", provider: "Anthropic", icon: "🟠", tier: "starter" },
+  { id: "claude-opus", name: "Claude Opus", provider: "Anthropic", icon: "🟠", tier: "professional" },
 ];
+
+const tierRank: Record<string, number> = { free: 0, starter: 1, professional: 2, enterprise: 3 };
 
 export default function Chat() {
   const [chats, setChats] = useState<Chat[]>([
@@ -48,10 +55,10 @@ export default function Chat() {
           role: "assistant",
           content: "# Welcome to NEXARIVO-AI\n\nHello! I'm your AI assistant powered by Claude and ChatGPT. I can help you with:\n\n- **Code Generation** - Write and debug code\n- **Writing** - Create content and documents\n- **Analysis** - Break down complex topics\n- **Problem Solving** - Find solutions to your challenges\n\nHow can I assist you today?",
           timestamp: new Date(),
-          model: "gpt-4",
+          model: "nexarivo-lite",
         },
       ],
-      model: "gpt-4",
+      model: "nexarivo-lite",
       createdAt: new Date(),
       updatedAt: new Date(),
     },
@@ -59,10 +66,12 @@ export default function Chat() {
 
   const [currentChatId, setCurrentChatId] = useState("1");
   const [input, setInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState("gpt-4");
+  const [selectedModel, setSelectedModel] = useState("nexarivo-lite");
   const [isLoading, setIsLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatMutation = trpc.ai.chat.useMutation();
 
   const currentChat = chats.find((c) => c.id === currentChatId);
   const messages = currentChat?.messages || [];
@@ -98,33 +107,59 @@ export default function Chat() {
       )
     );
 
+    const question = input.trim();
     setInput("");
     setIsLoading(true);
 
-    // Simulate streaming response
-    setTimeout(() => {
+    try {
+      const response = await chatMutation.mutateAsync({
+        model: selectedModel,
+        messages: [
+          ...messages.map((message) => ({ role: message.role, content: message.content })),
+          { role: "user" as const, content: question },
+        ],
+      });
+
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: `## Response from ${selectedModel}\n\nYou asked: "${userMessage.content}"\n\nThis is a professional response. In production, this would be:\n\n- **Streamed** from the API in real-time\n- **Formatted** with markdown support\n- **Syntax highlighted** for code blocks\n- **Fully interactive** with copy and regenerate options\n\n\`\`\`python\n# Example code response\ndef hello_world():\n    print("Hello from NEXARIVO-AI")\n\`\`\`\n\nYou can regenerate, copy, or continue the conversation.`,
+        content: response.content,
         timestamp: new Date(),
-        model: selectedModel,
+        model: response.model,
       };
 
       setChats((prev) =>
         prev.map((chat) =>
           chat.id === currentChatId
+            ? { ...chat, messages: [...chat.messages, assistantMessage], updatedAt: new Date() }
+            : chat
+        )
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to get an answer right now. Please try again.";
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === currentChatId
             ? {
                 ...chat,
-                messages: [...chat.messages, assistantMessage],
+                messages: [
+                  ...chat.messages,
+                  {
+                    id: (Date.now() + 1).toString(),
+                    role: "assistant",
+                    content: `I couldn't answer that just now. ${message}`,
+                    timestamp: new Date(),
+                    model: selectedModel,
+                  },
+                ],
                 updatedAt: new Date(),
               }
             : chat
         )
       );
-
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleNewChat = () => {
@@ -151,7 +186,68 @@ export default function Chat() {
     navigator.clipboard.writeText(text);
   };
 
+  const handleRegenerate = async (assistantMessageId: string) => {
+    const messageIndex = messages.findIndex((message) => message.id === assistantMessageId);
+    const previousUserMessage = messageIndex > 0 ? messages[messageIndex - 1] : undefined;
+    if (!previousUserMessage || previousUserMessage.role !== "user" || isLoading) return;
+
+    const history = messages
+      .slice(0, messageIndex - 1)
+      .map((message) => ({ role: message.role, content: message.content }));
+    const model = messages[messageIndex]?.model ?? selectedModel;
+    setIsLoading(true);
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === currentChatId
+          ? { ...chat, messages: chat.messages.filter((message) => message.id !== assistantMessageId), updatedAt: new Date() }
+          : chat
+      )
+    );
+
+    try {
+      const response = await chatMutation.mutateAsync({
+        model,
+        messages: [...history, { role: "user" as const, content: previousUserMessage.content }],
+      });
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === currentChatId
+            ? {
+                ...chat,
+                messages: [
+                  ...chat.messages,
+                  { id: Date.now().toString(), role: "assistant", content: response.content, timestamp: new Date(), model: response.model },
+                ],
+                updatedAt: new Date(),
+              }
+            : chat
+        )
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to regenerate this answer.";
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === currentChatId
+            ? {
+                ...chat,
+                messages: [...chat.messages, { id: Date.now().toString(), role: "assistant", content: `I couldn't regenerate that answer. ${message}`, timestamp: new Date(), model }],
+                updatedAt: new Date(),
+              }
+            : chat
+        )
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const selectedModelInfo = models.find((m) => m.id === selectedModel);
+  const userTier = user?.subscriptionTier ?? "free";
+  const canAccessModel = (modelTier: string) => tierRank[modelTier] <= tierRank[userTier];
+  const handleModelChange = (modelId: string) => {
+    const nextModel = models.find((model) => model.id === modelId);
+    if (nextModel && canAccessModel(nextModel.tier)) setSelectedModel(modelId);
+  };
 
   return (
     <div className="flex h-full bg-background">
@@ -272,6 +368,8 @@ export default function Chat() {
                         <Button
                           variant="ghost"
                           size="sm"
+                          onClick={() => handleRegenerate(message.id)}
+                          disabled={isLoading}
                           className="h-6 w-6 p-0 hover:bg-accent/20"
                           title="Regenerate"
                         >
@@ -307,16 +405,17 @@ export default function Chat() {
                 <label className="text-xs font-semibold text-muted-foreground mb-2 block">
                   AI Model
                 </label>
-                <Select value={selectedModel} onValueChange={setSelectedModel}>
+                <Select value={selectedModel} onValueChange={handleModelChange}>
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {models.map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
+                      <SelectItem key={model.id} value={model.id} disabled={!canAccessModel(model.tier)}>
                         <span className="flex items-center gap-2">
                           <span>{model.icon}</span>
                           {model.name} ({model.provider})
+                          {!canAccessModel(model.tier) && <span className="text-xs text-muted-foreground">Requires {model.tier}</span>}
                         </span>
                       </SelectItem>
                     ))}

@@ -83,3 +83,10 @@
 - [ ] Test database persistence
 - [ ] Performance optimization
 - [ ] Cross-browser testing
+
+## Chat Answer Fix
+- [x] Replace simulated generic replies with real question-aware AI answers through a secure server-side procedure
+- [x] Enforce subscription-tier access on the server for paid models
+- [x] Add chat loading, error, and retry states
+- [x] Add Vitest coverage for chat access control and answer generation
+- [x] Verify the answer flow in the dashboard and save a checkpoint

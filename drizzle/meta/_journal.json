@@ -8,6 +8,13 @@
       "when": 1784350155497,
       "tag": "0000_flawless_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1787667825326,
+      "tag": "0001_brown_blade",
+      "breakpoints": true
     }
   ]
 }

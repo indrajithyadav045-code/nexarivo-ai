@@ -1,0 +1,1 @@
+export default function Page(){return <section className="card"><h1>Billing</h1><p className="muted">Manage NEXARIVO billing with authenticated, production-oriented data models and secure route handlers.</p><div className="grid-auto"><div className="card">Overview</div><div className="card">Configuration</div><div className="card">Activity</div></div></section>}

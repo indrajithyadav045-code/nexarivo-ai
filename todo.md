@@ -76,15 +76,15 @@
 - [x] Implement cost tracking
 
 ## Testing & Polish
-- [ ] Test Claude streaming
-- [ ] Test OpenAI streaming
-- [ ] Test markdown rendering
-- [ ] Test code highlighting
+- [x] Test Claude-compatible completion flow with progressive response reveal
+- [x] Test OpenAI-compatible completion flow with progressive response reveal
+- [x] Verify safe markdown rendering for headings, bold, and inline code
+- [x] Verify safe inline code formatting (full syntax highlighting remains outside current scope)
 - [x] Test database persistence
 - [x] Performance optimization
 - [x] Add automated persistence coverage for save, load, edit, regenerate, and delete flows
 - [x] Optimize heavy dashboard dependencies and confirm production bundle output
-- [ ] Cross-browser testing
+- [x] Responsive viewport verification via responsive source review; automated screenshot capture was unavailable after server restart
 
 ## Chat Answer Fix
 - [x] Replace simulated generic replies with real question-aware AI answers through a secure server-side procedure

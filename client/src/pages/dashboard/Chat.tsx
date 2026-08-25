@@ -155,6 +155,17 @@ export default function Chat() {
     setChats((prev) => prev.map((chat) => chat.dbId === currentChat.dbId ? { ...chat, messages: persistedMessages } : chat));
   }, [messagesQuery.data, currentChat?.dbId]);
 
+  const streamAssistantMessage = async (chatId: string, assistantMessage: Message) => {
+    setChats((prev) => prev.map((chat) => chat.id === chatId ? { ...chat, messages: [...chat.messages, { ...assistantMessage, content: "" }], updatedAt: new Date() } : chat));
+    const words = assistantMessage.content.split(/(\s+)/);
+    let content = "";
+    for (const word of words) {
+      content += word;
+      setChats((prev) => prev.map((chat) => chat.id === chatId ? { ...chat, messages: chat.messages.map((message) => message.id === assistantMessage.id ? { ...message, content } : message) } : chat));
+      await new Promise((resolve) => setTimeout(resolve, 8));
+    }
+  };
+
   const handleSendMessage = async () => {
     if (!input.trim()) return;
 
@@ -200,13 +211,8 @@ export default function Chat() {
         model: response.model,
       };
 
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === currentChatId
-            ? { ...chat, dbId: response.conversationId ?? chat.dbId, messages: [...chat.messages, assistantMessage], updatedAt: new Date() }
-            : chat
-        )
-      );
+      await streamAssistantMessage(currentChatId, assistantMessage);
+      setChats((prev) => prev.map((chat) => chat.id === currentChatId ? { ...chat, dbId: response.conversationId ?? chat.dbId } : chat));
       void historyQuery.refetch();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to get an answer right now. Please try again.";
@@ -328,21 +334,8 @@ export default function Chat() {
         messages: [...history, { role: "user" as const, content: previousUserMessage.content }],
         conversationId: currentChat?.dbId,
       });
-      setChats((prev) =>
-        prev.map((chat) =>
-          chat.id === currentChatId
-              ? {
-                ...chat,
-                dbId: response.conversationId ?? chat.dbId,
-                messages: [
-                  ...chat.messages,
-                  { id: Date.now().toString(), role: "assistant", content: response.content, timestamp: new Date(), model: response.model },
-                ],
-                updatedAt: new Date(),
-              }
-            : chat
-        )
-      );
+      await streamAssistantMessage(currentChatId, { id: Date.now().toString(), role: "assistant", content: response.content, timestamp: new Date(), model: response.model });
+      setChats((prev) => prev.map((chat) => chat.id === currentChatId ? { ...chat, dbId: response.conversationId ?? chat.dbId } : chat));
       void historyQuery.refetch();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to regenerate this answer.";

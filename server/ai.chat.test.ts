@@ -47,6 +47,17 @@ describe("ai.chat", () => {
     expect(invokeLLMMock).toHaveBeenCalledOnce();
   });
 
+  it("routes OpenAI and Claude model selections through the real AI gateway", async () => {
+    const professional = appRouter.createCaller(createContext("professional"));
+    await professional.ai.chat({ model: "gpt-4", messages: [{ role: "user", content: "Give a concise definition." }] });
+    expect(invokeLLMMock).toHaveBeenCalledWith(expect.objectContaining({ model: "gpt-5" }));
+
+    invokeLLMMock.mockClear();
+    const enterprise = appRouter.createCaller(createContext("enterprise"));
+    await enterprise.ai.chat({ model: "claude-sonnet", messages: [{ role: "user", content: "Give a concise definition." }] });
+    expect(invokeLLMMock).toHaveBeenCalledWith(expect.objectContaining({ model: "claude-sonnet-4-6" }));
+  });
+
   it("blocks a model above the user's paid tier", async () => {
     const caller = appRouter.createCaller(createContext("free"));
 

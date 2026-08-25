@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -9,8 +9,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Send, Plus, Copy, RotateCcw, Trash2, Loader } from "lucide-react";
-import { Streamdown } from "streamdown";
+import { Check, Copy, Loader, Pencil, Plus, RotateCcw, Search, Send, Trash2, X } from "lucide-react";
+function SimpleMarkdown({ content }: { content: string }) {
+  return <div className="space-y-2 whitespace-pre-wrap">{content.split("\n").map((line, index) => {
+    const heading = line.match(/^(#{1,3})\s+(.*)$/);
+    const text = heading ? heading[2] : line;
+    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, partIndex) => {
+      if (part.startsWith("**") && part.endsWith("**")) return <strong key={partIndex}>{part.slice(2, -2)}</strong>;
+      if (part.startsWith("`") && part.endsWith("`")) return <code key={partIndex} className="rounded bg-muted px-1 py-0.5 text-xs">{part.slice(1, -1)}</code>;
+      return <span key={partIndex}>{part}</span>;
+    });
+    return heading ? <p key={index} className="font-semibold text-base">{parts}</p> : <p key={index}>{parts}</p>;
+  })}</div>;
+}
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 
@@ -30,6 +41,7 @@ interface Chat {
   model: string;
   createdAt: Date;
   updatedAt: Date;
+  dbId?: number;
 }
 
 const models = [
@@ -69,12 +81,43 @@ export default function Chat() {
   const [selectedModel, setSelectedModel] = useState("nexarivo-lite");
   const [isLoading, setIsLoading] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [historySearch, setHistorySearch] = useState("");
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingText, setEditingText] = useState("");
+  const [chatError, setChatError] = useState<string | null>(null);
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatMutation = trpc.ai.chat.useMutation();
-
   const currentChat = chats.find((c) => c.id === currentChatId);
   const messages = currentChat?.messages || [];
+  const currentDbId = currentChat?.dbId ?? 0;
+  const chatMutation = trpc.ai.chat.useMutation();
+  const historyQuery = trpc.chatHistory.list.useQuery(undefined, { enabled: Boolean(user) });
+  const messagesQuery = trpc.chatHistory.messages.useQuery(
+    { conversationId: currentDbId },
+    { enabled: Boolean(user && currentDbId) }
+  );
+  const deleteConversationMutation = trpc.chatHistory.delete.useMutation();
+  const updateMessageMutation = trpc.chatHistory.updateMessage.useMutation();
+  const persistedSearchQuery = trpc.chatHistory.search.useQuery(
+    { query: historySearch.trim() },
+    { enabled: Boolean(user && historySearch.trim().length >= 2) }
+  );
+  const filteredChats = useMemo(() => {
+    const query = historySearch.trim().toLowerCase();
+    if (!query) return chats;
+    if (historySearch.trim().length >= 2 && persistedSearchQuery.data) {
+      return persistedSearchQuery.data.map((chat) => ({
+        id: String(chat.id),
+        dbId: chat.id,
+        title: chat.title,
+        messages: [],
+        model: chat.model,
+        createdAt: new Date(chat.createdAt),
+        updatedAt: new Date(chat.updatedAt),
+      }));
+    }
+    return chats.filter((chat) => chat.title.toLowerCase().includes(query) || chat.messages.some((message) => message.content.toLowerCase().includes(query)));
+  }, [chats, historySearch, persistedSearchQuery.data]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -83,6 +126,34 @@ export default function Chat() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  useEffect(() => {
+    if (!historyQuery.data?.length) return;
+    const persistedChats: Chat[] = historyQuery.data.map((chat) => ({
+      id: String(chat.id),
+      dbId: chat.id,
+      title: chat.title,
+      messages: [],
+      model: chat.model,
+      createdAt: new Date(chat.createdAt),
+      updatedAt: new Date(chat.updatedAt),
+    }));
+    setChats(persistedChats);
+    setCurrentChatId((current) => persistedChats.some((chat) => chat.id === current) ? current : persistedChats[0].id);
+    setSelectedModel((current) => persistedChats.find((chat) => chat.id === current)?.model ?? current);
+  }, [historyQuery.data]);
+
+  useEffect(() => {
+    if (!messagesQuery.data || !currentChat?.dbId) return;
+    const persistedMessages: Message[] = messagesQuery.data.map((message) => ({
+      id: String(message.id),
+      role: message.role,
+      content: message.content,
+      timestamp: new Date(message.createdAt),
+      model: message.model ?? undefined,
+    }));
+    setChats((prev) => prev.map((chat) => chat.dbId === currentChat.dbId ? { ...chat, messages: persistedMessages } : chat));
+  }, [messagesQuery.data, currentChat?.dbId]);
 
   const handleSendMessage = async () => {
     if (!input.trim()) return;
@@ -118,6 +189,7 @@ export default function Chat() {
           ...messages.map((message) => ({ role: message.role, content: message.content })),
           { role: "user" as const, content: question },
         ],
+        conversationId: currentChat?.dbId,
       });
 
       const assistantMessage: Message = {
@@ -131,10 +203,11 @@ export default function Chat() {
       setChats((prev) =>
         prev.map((chat) =>
           chat.id === currentChatId
-            ? { ...chat, messages: [...chat.messages, assistantMessage], updatedAt: new Date() }
+            ? { ...chat, dbId: response.conversationId ?? chat.dbId, messages: [...chat.messages, assistantMessage], updatedAt: new Date() }
             : chat
         )
       );
+      void historyQuery.refetch();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to get an answer right now. Please try again.";
       setChats((prev) =>
@@ -175,15 +248,60 @@ export default function Chat() {
     setCurrentChatId(newChat.id);
   };
 
-  const handleDeleteChat = (chatId: string) => {
+  const handleDeleteChat = async (chatId: string) => {
+    setChatError(null);
+    const chatToDelete = chats.find((chat) => chat.id === chatId);
+    if (chatToDelete?.dbId) {
+      try {
+        await deleteConversationMutation.mutateAsync({ conversationId: chatToDelete.dbId });
+      } catch (error) {
+        console.warn("[Chat] Could not delete persisted conversation:", error);
+        setChatError("This conversation could not be deleted. Please try again.");
+        return;
+      }
+    }
     setChats((prev) => prev.filter((c) => c.id !== chatId));
     if (currentChatId === chatId) {
-      setCurrentChatId(chats[0]?.id || "");
+      const nextChat = chats.find((chat) => chat.id !== chatId);
+      setCurrentChatId(nextChat?.id || "");
     }
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const startEditingMessage = (message: Message) => {
+    setEditingMessageId(message.id);
+    setEditingText(message.content);
+  };
+
+  const saveEditedMessage = async () => {
+    if (!editingMessageId || !editingText.trim()) return;
+    const messageId = Number(editingMessageId);
+    if (Number.isInteger(messageId) && messageId > 0) {
+      try {
+        await updateMessageMutation.mutateAsync({ messageId, content: editingText.trim() });
+      } catch (error) {
+        console.warn("[Chat] Could not persist edited message:", error);
+        return;
+      }
+    }
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === currentChatId
+          ? {
+              ...chat,
+              messages: chat.messages.map((message) =>
+                message.id === editingMessageId ? { ...message, content: editingText.trim() } : message
+              ),
+              updatedAt: new Date(),
+            }
+          : chat
+      )
+    );
+    setEditingMessageId(null);
+    setEditingText("");
   };
 
   const handleRegenerate = async (assistantMessageId: string) => {
@@ -208,12 +326,14 @@ export default function Chat() {
       const response = await chatMutation.mutateAsync({
         model,
         messages: [...history, { role: "user" as const, content: previousUserMessage.content }],
+        conversationId: currentChat?.dbId,
       });
       setChats((prev) =>
         prev.map((chat) =>
           chat.id === currentChatId
-            ? {
+              ? {
                 ...chat,
+                dbId: response.conversationId ?? chat.dbId,
                 messages: [
                   ...chat.messages,
                   { id: Date.now().toString(), role: "assistant", content: response.content, timestamp: new Date(), model: response.model },
@@ -223,6 +343,7 @@ export default function Chat() {
             : chat
         )
       );
+      void historyQuery.refetch();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to regenerate this answer.";
       setChats((prev) =>
@@ -264,8 +385,21 @@ export default function Chat() {
             </Button>
           </div>
 
+          <div className="p-3 border-b border-border">
+            <div className="relative">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={historySearch}
+                onChange={(event) => setHistorySearch(event.target.value)}
+                placeholder="Search conversations"
+                aria-label="Search conversations"
+                className="h-9 pl-9 bg-background"
+              />
+            </div>
+          </div>
+
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {chats.map((chat) => (
+            {filteredChats.map((chat) => (
               <div
                 key={chat.id}
                 onClick={() => setCurrentChatId(chat.id)}
@@ -319,6 +453,8 @@ export default function Chat() {
           </div>
         </div>
 
+        {chatError && <div role="alert" className="mx-6 mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">{chatError}</div>}
+
         {/* Messages Area */}
         <div className="flex-1 overflow-auto p-6 space-y-4">
           {messages.length === 0 ? (
@@ -342,9 +478,26 @@ export default function Chat() {
                       : "bg-card border border-border rounded-2xl rounded-tl-sm p-4"
                   }`}
                 >
-                  {message.role === "assistant" ? (
+                  {editingMessageId === message.id ? (
+                    <div className="space-y-2">
+                      <Input
+                        value={editingText}
+                        onChange={(event) => setEditingText(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter") saveEditedMessage();
+                          if (event.key === "Escape") setEditingMessageId(null);
+                        }}
+                        autoFocus
+                        aria-label="Edit message"
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={saveEditedMessage} className="h-7 gap-1"><Check size={13} /> Save</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingMessageId(null)} className="h-7 gap-1"><X size={13} /> Cancel</Button>
+                      </div>
+                    </div>
+                  ) : message.role === "assistant" ? (
                     <div className="prose prose-invert max-w-none text-sm">
-                      <Streamdown>{message.content}</Streamdown>
+                      <SimpleMarkdown content={message.content} />
                     </div>
                   ) : (
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -354,7 +507,18 @@ export default function Chat() {
                     <span className="text-xs opacity-70">
                       {message.timestamp.toLocaleTimeString()}
                     </span>
-                    {message.role === "assistant" && (
+                    {message.role === "user" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => startEditingMessage(message)}
+                        disabled={isLoading}
+                        className="h-6 w-6 p-0 hover:bg-accent/20"
+                        title="Edit message"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                    ) : (
                       <div className="flex gap-2">
                         <Button
                           variant="ghost"

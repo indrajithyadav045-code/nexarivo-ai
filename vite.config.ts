@@ -167,6 +167,15 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/streamdown")) return "markdown-renderer";
+          if (id.includes("node_modules/mermaid") || id.includes("node_modules/cytoscape")) return "diagram-tools";
+          if (id.includes("node_modules/recharts")) return "chart-tools";
+        },
+      },
+    },
   },
   server: {
     host: true,

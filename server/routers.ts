@@ -1,5 +1,6 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { addChatMessage, createConversation, deleteConversation, getConversationMessages, getConversationsByUserId, getRecentUsage, getUsageByDay, getUsageByModel, getUsageSummary, recordUsageEvent, searchConversations, updateChatMessage } from "./db";
 import { systemRouter } from "./_core/systemRouter";
 import { invokeLLM } from "./_core/llm";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -35,6 +36,15 @@ const providerModels: Record<string, string> = {
   "claude-opus": "claude-opus-4-6",
 };
 
+const getUsageValue = (usage: unknown, keys: string[]) => {
+  if (!usage || typeof usage !== "object") return 0;
+  const record = usage as Record<string, unknown>;
+  for (const key of keys) {
+    if (typeof record[key] === "number") return record[key] as number;
+  }
+  return 0;
+};
+
 const getTextContent = (content: unknown): string => {
   if (typeof content === "string") return content;
   if (Array.isArray(content)) {
@@ -64,12 +74,14 @@ export const appRouter = router({
       .input(
         z.object({
           model: z.string().min(1),
-          messages: z.array(
-            z.object({
-              role: z.enum(["user", "assistant"]),
-              content: z.string().min(1).max(50000),
-            })
-          ).min(1).max(50),
+                      messages: z.array(
+              z.object({
+                role: z.enum(["user", "assistant"]),
+                content: z.string().min(1).max(50000),
+              })
+            ).min(1).max(50),
+            conversationId: z.number().int().positive().optional(),
+
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -86,7 +98,10 @@ export const appRouter = router({
           });
         }
 
-        const response = await invokeLLM({
+        const startedAt = Date.now();
+        let response;
+        try {
+          response = await invokeLLM({
           model: providerModels[input.model],
           maxTokens: 1200,
           messages: [
@@ -97,15 +112,64 @@ export const appRouter = router({
             },
             ...input.messages,
           ],
-        });
+          });
+        } catch (error) {
+          void recordUsageEvent({ userId: ctx.user.id, model: input.model, latencyMs: Date.now() - startedAt, status: "error" }).catch((recordError) => console.warn("[Analytics] Could not record failed usage:", recordError));
+          throw error;
+        }
 
         const content = getTextContent(response.choices?.[0]?.message?.content);
+        const usage = response.usage;
+        void recordUsageEvent({
+          userId: ctx.user.id,
+          model: input.model,
+          inputTokens: getUsageValue(usage, ["inputTokens", "promptTokens", "prompt_tokens"]),
+          outputTokens: getUsageValue(usage, ["outputTokens", "completionTokens", "completion_tokens"]),
+          latencyMs: Date.now() - startedAt,
+        }).catch((error) => console.warn("[Analytics] Could not record usage:", error));
+        let conversationId = input.conversationId;
+        try {
+          if (!conversationId) {
+            const firstUserMessage = input.messages.find((message) => message.role === "user");
+            const title = (firstUserMessage?.content.trim() || "New Chat").slice(0, 80);
+            conversationId = await createConversation(ctx.user.id, input.model, title);
+          }
+          const latestUserMessage = [...input.messages].reverse().find((message) => message.role === "user");
+          if (latestUserMessage) await addChatMessage(conversationId, "user", latestUserMessage.content);
+          await addChatMessage(conversationId, "assistant", content, input.model);
+        } catch (error) {
+          console.warn("[Chat] Could not persist conversation:", error);
+        }
         return {
           content,
           model: input.model,
           usage: response.usage,
+          conversationId,
         };
       }),
+  }),
+
+  analytics: router({
+    summary: protectedProcedure.query(({ ctx }) => getUsageSummary(ctx.user.id)),
+    byModel: protectedProcedure.query(({ ctx }) => getUsageByModel(ctx.user.id)),
+    byDay: protectedProcedure.query(({ ctx }) => getUsageByDay(ctx.user.id)),
+    recent: protectedProcedure.query(({ ctx }) => getRecentUsage(ctx.user.id)),
+  }),
+
+  chatHistory: router({
+    list: protectedProcedure.query(({ ctx }) => getConversationsByUserId(ctx.user.id)),
+    messages: protectedProcedure.input(z.object({ conversationId: z.number().int().positive() })).query(({ ctx, input }) =>
+      getConversationMessages(ctx.user.id, input.conversationId)
+    ),
+    search: protectedProcedure.input(z.object({ query: z.string().min(1).max(100) })).query(({ ctx, input }) =>
+      searchConversations(ctx.user.id, input.query)
+    ),
+    updateMessage: protectedProcedure.input(z.object({ messageId: z.number().int().positive(), content: z.string().min(1).max(50000) })).mutation(({ ctx, input }) =>
+      updateChatMessage(ctx.user.id, input.messageId, input.content)
+    ),
+    delete: protectedProcedure.input(z.object({ conversationId: z.number().int().positive() })).mutation(({ ctx, input }) =>
+      deleteConversation(ctx.user.id, input.conversationId)
+    ),
   }),
 });
 

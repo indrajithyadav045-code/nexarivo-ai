@@ -54,34 +54,36 @@
 - [x] Add markdown rendering to chat messages
 - [x] Add code syntax highlighting
 - [x] Implement message copy-to-clipboard
-- [ ] Add message regeneration
-- [ ] Add message editing
-- [ ] Implement search within chat history
+- [x] Add message regeneration
+- [x] Add message editing
+- [x] Implement search within chat history
 - [x] Add typing indicators for streaming
 
 ## Database Integration
-- [ ] Create chat history schema
-- [ ] Implement save chat functionality
-- [ ] Implement load chat history
-- [ ] Add chat deletion
-- [ ] Implement chat search and filtering
-- [ ] Add conversation metadata (title, date, model)
+- [x] Create chat history schema
+- [x] Implement save chat functionality
+- [x] Implement load chat history
+- [x] Add chat deletion
+- [x] Implement chat search and filtering
+- [x] Add conversation metadata (title, date, model)
 
 ## Dashboard Enhancements
-- [ ] Add real-time usage analytics
-- [ ] Implement token consumption tracking
-- [ ] Add request success/failure metrics
-- [ ] Create usage charts with real data
-- [ ] Add model usage breakdown
-- [ ] Implement cost tracking
+- [x] Add real-time usage analytics
+- [x] Implement token consumption tracking
+- [x] Add request success/failure metrics
+- [x] Create usage charts with real data
+- [x] Add model usage breakdown
+- [x] Implement cost tracking
 
 ## Testing & Polish
 - [ ] Test Claude streaming
 - [ ] Test OpenAI streaming
 - [ ] Test markdown rendering
 - [ ] Test code highlighting
-- [ ] Test database persistence
-- [ ] Performance optimization
+- [x] Test database persistence
+- [x] Performance optimization
+- [x] Add automated persistence coverage for save, load, edit, regenerate, and delete flows
+- [x] Optimize heavy dashboard dependencies and confirm production bundle output
 - [ ] Cross-browser testing
 
 ## Chat Answer Fix

@@ -1,4 +1,5 @@
 import { Toaster } from "@/components/ui/sonner";
+import { lazy, Suspense } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
@@ -6,14 +7,14 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { useAuth } from "@/_core/hooks/useAuth";
 import Home from "./pages/Home";
-import Dashboard from "./pages/Dashboard";
-import DashboardChat from "./pages/dashboard/Chat";
-import DashboardProjects from "./pages/dashboard/Projects";
-import DashboardDocuments from "./pages/dashboard/Documents";
-import DashboardKnowledgeBase from "./pages/dashboard/KnowledgeBase";
-import DashboardAgents from "./pages/dashboard/Agents";
-import DashboardAnalytics from "./pages/dashboard/Analytics";
-import DashboardSettings from "./pages/dashboard/Settings";
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const DashboardChat = lazy(() => import("./pages/dashboard/Chat"));
+const DashboardProjects = lazy(() => import("./pages/dashboard/Projects"));
+const DashboardDocuments = lazy(() => import("./pages/dashboard/Documents"));
+const DashboardKnowledgeBase = lazy(() => import("./pages/dashboard/KnowledgeBase"));
+const DashboardAgents = lazy(() => import("./pages/dashboard/Agents"));
+const DashboardAnalytics = lazy(() => import("./pages/dashboard/Analytics"));
+const DashboardSettings = lazy(() => import("./pages/dashboard/Settings"));
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isAuthenticated, loading } = useAuth();
@@ -58,7 +59,9 @@ function App() {
       <ThemeProvider defaultTheme="dark" switchable>
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-background text-muted-foreground">Loading workspace…</div>}>
+            <Router />
+          </Suspense>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

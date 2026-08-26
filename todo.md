@@ -92,3 +92,6 @@
 - [x] Add chat loading, error, and retry states
 - [x] Add Vitest coverage for chat access control and answer generation
 - [x] Verify the answer flow in the dashboard and save a checkpoint
+
+## Routing Fix
+- [x] Keep the public landing page as the default root route and prevent unintended automatic redirects to Chat
